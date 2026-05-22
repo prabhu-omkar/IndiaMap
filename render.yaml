@@ -29,7 +29,6 @@ services:
     name: polycraft-client
     env: static
     plan: free
-    region: oregon
     rootDir: client
     buildCommand: npm install && npm run build
     staticPublishPath: dist
