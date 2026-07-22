@@ -290,7 +290,7 @@ export default function IndiaMap({ states, selectedState, heatmapMode, onStateCl
   const [geoFeatures, setGeoFeatures] = useState<any[]>([])
 
   useEffect(() => {
-    fetch('/modern_india.geojson').then(r => r.json()).then(d => setGeoFeatures(d.features ?? []))
+    fetch(`${import.meta.env.BASE_URL}modern_india.geojson`).then(r => r.json()).then(d => setGeoFeatures(d.features ?? []))
   }, [])
 
   const stateShapes = useMemo(() => {
