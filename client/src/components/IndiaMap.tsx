@@ -38,7 +38,7 @@ function geometryToShapes(geometry: any): THREE.Shape[] {
   return shapes
 }
 
-/* ── Color logic ─────────────────────────────────────────────── */
+/* ── Target colors for modes ──────────────────────────────────── */
 function getStateColors(
   state: StateData | undefined,
   mode: HeatmapMode,
@@ -52,13 +52,11 @@ function getStateColors(
   const lerp = (lo: THREE.Color, hi: THREE.Color, t: number) =>
     new THREE.Color().lerpColors(lo, hi, Math.min(1, Math.max(0, t)))
 
-  // ── Standard / Terrain mode ──────────────────────────────────
   if (mode === 'none') {
     const info = TERRAIN_INFO[STATE_TERRAIN[state.code] ?? 'plains']
     return [new THREE.Color(info.topColor), new THREE.Color(info.sideColor)]
   }
 
-  // ── Data-driven modes ────────────────────────────────────────
   let top: THREE.Color
   if (mode === 'gdp')        top = lerp(new THREE.Color('#c8d5b9'), new THREE.Color('#2d6a1f'), state.totalGdp / 3224000)
   else if (mode === 'population') top = lerp(new THREE.Color('#bfd7ea'), new THREE.Color('#0c4a87'), state.population / 220)
@@ -68,11 +66,10 @@ function getStateColors(
   return [top, top.clone().multiplyScalar(0.48)]
 }
 
-/* ── Extrude depth ───────────────────────────────────────────── */
+/* ── Target depth for modes ──────────────────────────────────── */
 function calcDepth(state: StateData | undefined, mode: HeatmapMode): number {
   if (!state) return 0.36
   if (mode === 'none') {
-    // Terrain base height + subtle per-capita modifier for visual interest
     const base = TERRAIN_INFO[STATE_TERRAIN[state.code] ?? 'plains'].heightBase
     return base + (state.perCapitaIncome / 600000) * 0.16
   }
@@ -122,13 +119,13 @@ function StateMesh({ shapes, code, stateData, heatmapMode, isSelected, onStateCl
   const groupRef = useRef<THREE.Group>(null)
   const meshRef  = useRef<THREE.Mesh>(null)
   const [hovered, setHovered] = useState(false)
+  const currentDepth = useRef<number>(calcDepth(stateData, heatmapMode))
 
-  const extrudeDepth = useMemo(() => calcDepth(stateData, heatmapMode), [stateData, heatmapMode])
-
+  // Constant base geometry (depth 1.0), height scaled smoothly via mesh.scale.z
   const geometry = useMemo(() => {
     if (!shapes.length) return null
     const geo = new THREE.ExtrudeGeometry(shapes, {
-      depth: extrudeDepth,
+      depth: 1.0,
       bevelEnabled: true,
       bevelSegments: 1,
       bevelSize: 0.012,
@@ -137,46 +134,68 @@ function StateMesh({ shapes, code, stateData, heatmapMode, isSelected, onStateCl
     geo.computeBoundingBox()
     const center = new THREE.Vector3()
     geo.boundingBox!.getCenter(center)
-    geo.translate(-center.x, -center.y, -center.z)
-    geo.userData.center = center.clone()
+    geo.translate(-center.x, -center.y, 0)
+    geo.userData.center = new THREE.Vector3(center.x, center.y, 0)
     return geo
-  }, [shapes, extrudeDepth])
+  }, [shapes])
 
-  useEffect(() => {
-    if (groupRef.current && geometry?.userData.center) {
-      const { x, y, z } = geometry.userData.center
-      groupRef.current.position.set(x, z, -y)
-      groupRef.current.userData.baseY = z
-    }
-  }, [geometry])
-
-  useFrame((_, delta) => {
-    if (!groupRef.current) return
-    const base   = groupRef.current.userData.baseY ?? 0
-    const target = isSelected ? base + 0.26 : hovered ? base + 0.12 : base
-    groupRef.current.position.y = THREE.MathUtils.lerp(groupRef.current.position.y, target, 9 * delta)
-
-    // Gentle emissive pulse on selected state
-    if (isSelected && meshRef.current) {
-      const mats = meshRef.current.material as THREE.Material[]
-      const m = mats[0] as THREE.MeshStandardMaterial
-      m.emissiveIntensity = 0.16 + Math.sin(Date.now() * 0.0022) * 0.08
-    }
-  })
-
+  // Create persistent materials for smooth color lerping
   const [topColor, sideColor] = useMemo(
     () => getStateColors(stateData, heatmapMode, isSelected, hovered),
-    [stateData, heatmapMode, isSelected, hovered],
+    [stateData, heatmapMode, isSelected, hovered]
   )
 
   const [topMat, sideMat] = useMemo(() => [
     new THREE.MeshStandardMaterial({
-      color: topColor, roughness: 0.60, metalness: 0.04,
-      emissive: isSelected ? topColor.clone().multiplyScalar(0.24) : hovered ? topColor.clone().multiplyScalar(0.10) : new THREE.Color(0),
-      emissiveIntensity: isSelected ? 0.18 : hovered ? 0.10 : 0,
+      color: topColor.clone(),
+      roughness: 0.60,
+      metalness: 0.04,
     }),
-    new THREE.MeshStandardMaterial({ color: sideColor, roughness: 0.92 }),
-  ], [topColor, sideColor, isSelected, hovered])
+    new THREE.MeshStandardMaterial({
+      color: sideColor.clone(),
+      roughness: 0.92,
+    }),
+  ], [shapes])
+
+  useEffect(() => {
+    if (groupRef.current && geometry?.userData.center) {
+      const { x, y } = geometry.userData.center
+      groupRef.current.position.set(x, 0, -y)
+      groupRef.current.userData.baseY = 0
+    }
+  }, [geometry])
+
+  // Smooth frame-by-frame animation for height + colors + hover lift
+  useFrame((_, delta) => {
+    if (!groupRef.current || !meshRef.current) return
+
+    // 1. Smooth height extrusion lerp across modes
+    const targetDepth = calcDepth(stateData, heatmapMode)
+    currentDepth.current = THREE.MathUtils.lerp(currentDepth.current, targetDepth, 7 * delta)
+    meshRef.current.scale.set(1, 1, currentDepth.current)
+
+    // 2. Smooth position float for hover & selection
+    const base = groupRef.current.userData.baseY ?? 0
+    const floatTarget = isSelected ? base + 0.26 : hovered ? base + 0.12 : base
+    groupRef.current.position.y = THREE.MathUtils.lerp(groupRef.current.position.y, floatTarget, 9 * delta)
+
+    // 3. Smooth color morphing across modes & states
+    const [targetTop, targetSide] = getStateColors(stateData, heatmapMode, isSelected, hovered)
+    topMat.color.lerp(targetTop, 7 * delta)
+    sideMat.color.lerp(targetSide, 7 * delta)
+
+    // 4. Smooth emissive pulse
+    if (isSelected) {
+      topMat.emissive.lerp(targetTop.clone().multiplyScalar(0.24), 7 * delta)
+      topMat.emissiveIntensity = 0.18 + Math.sin(Date.now() * 0.0022) * 0.08
+    } else if (hovered) {
+      topMat.emissive.lerp(targetTop.clone().multiplyScalar(0.10), 7 * delta)
+      topMat.emissiveIntensity = 0.10
+    } else {
+      topMat.emissive.setRGB(0, 0, 0)
+      topMat.emissiveIntensity = 0
+    }
+  })
 
   if (!geometry) return null
 
@@ -202,7 +221,7 @@ function StateMesh({ shapes, code, stateData, heatmapMode, isSelected, onStateCl
           }
         }}
       />
-      <lineSegments rotation={[-Math.PI / 2, 0, 0]} renderOrder={1}>
+      <lineSegments ref={meshRef => { if (meshRef && groupRef.current) meshRef.scale.set(1, 1, currentDepth.current) }} rotation={[-Math.PI / 2, 0, 0]} renderOrder={1}>
         <edgesGeometry args={[geometry, 20]} />
         <lineBasicMaterial
           color={isSelected ? '#78340c' : hovered ? '#075985' : '#1c1917'}
@@ -210,7 +229,7 @@ function StateMesh({ shapes, code, stateData, heatmapMode, isSelected, onStateCl
           opacity={isSelected ? 0.80 : hovered ? 0.65 : 0.16}
         />
       </lineSegments>
-      {isSelected && <PulseRings baseY={extrudeDepth / 2} />}
+      {isSelected && <PulseRings baseY={currentDepth.current / 2} />}
     </group>
   )
 }
