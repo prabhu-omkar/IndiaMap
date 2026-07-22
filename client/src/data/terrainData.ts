@@ -77,15 +77,15 @@ export const STATE_TERRAIN: Record<string, TerrainType> = {
 export const TERRAIN_INFO: Record<TerrainType, TerrainInfo> = {
   snow_mountain: {
     label: 'Himalayan Mountains',
-    icon:  '🏔️',
+    icon:  '',
     topColor:   '#c4d4de',
     sideColor:  '#8096a4',
-    heightBase: 0.72,     // mountains are tallest
+    heightBase: 0.72,
     decoration: 'snow',
   },
   green_mountain: {
     label: 'Hill & Rainforest',
-    icon:  '⛰️',
+    icon:  '',
     topColor:   '#5a8060',
     sideColor:  '#3a5540',
     heightBase: 0.60,
@@ -93,23 +93,23 @@ export const TERRAIN_INFO: Record<TerrainType, TerrainInfo> = {
   },
   desert: {
     label: 'Desert & Arid',
-    icon:  '🏜️',
+    icon:  '',
     topColor:   '#d4a96a',
     sideColor:  '#9a7040',
-    heightBase: 0.34,     // flat desert
+    heightBase: 0.34,
     decoration: 'cactus',
   },
   coastal: {
     label: 'Coastal Tropical',
-    icon:  '🌴',
+    icon:  '',
     topColor:   '#3d9970',
     sideColor:  '#2a6a50',
-    heightBase: 0.36,     // low coastal plains
+    heightBase: 0.36,
     decoration: 'palm',
   },
   plains: {
     label: 'Fertile Plains',
-    icon:  '🌾',
+    icon:  '',
     topColor:   '#6aaa50',
     sideColor:  '#4a7a38',
     heightBase: 0.42,
@@ -117,15 +117,15 @@ export const TERRAIN_INFO: Record<TerrainType, TerrainInfo> = {
   },
   plateau: {
     label: 'Deccan Plateau',
-    icon:  '🗻',
+    icon:  '',
     topColor:   '#c47d4a',
     sideColor:  '#8a5030',
-    heightBase: 0.52,     // elevated plateau
+    heightBase: 0.52,
     decoration: null,
   },
   forest: {
     label: 'Dense Jungle',
-    icon:  '🌲',
+    icon:  '',
     topColor:   '#3d6e30',
     sideColor:  '#2a4a20',
     heightBase: 0.48,
@@ -133,10 +133,10 @@ export const TERRAIN_INFO: Record<TerrainType, TerrainInfo> = {
   },
   metro: {
     label: 'Metropolitan',
-    icon:  '🏙️',
+    icon:  '',
     topColor:   '#909498',
     sideColor:  '#606870',
-    heightBase: 0.65,     // tall urban
+    heightBase: 0.65,
     decoration: 'city',
   },
 }

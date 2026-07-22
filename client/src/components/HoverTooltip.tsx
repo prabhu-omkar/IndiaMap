@@ -34,7 +34,7 @@ export default function HoverTooltip({ data }: Props) {
         </span>
       </div>
       <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 9 }}>
-        🏛 {state.capital}
+        Capital: {state.capital}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, borderTop: '1px solid var(--border)', paddingTop: 8 }}>
         <div>

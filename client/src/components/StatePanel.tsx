@@ -147,23 +147,17 @@ function CompBar({ value, max, avg, color, label, formatted, avgLabel }: {
 
 /* ── National Rank Badge ─────────────────────────────────────── */
 function RankBadge({ rank, label, color, total }: { rank: number; label: string; color: string; total: number }) {
-  const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null
-
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
       padding: '11px 8px', borderRadius: 12,
-      background: rank <= 3 ? `${color}10` : '#faf9f7',
-      border: `1px solid ${rank <= 3 ? color + '35' : 'var(--border)'}`,
+      background: rank <= 3 ? `${color}12` : '#faf9f7',
+      border: `1px solid ${rank <= 3 ? color + '40' : 'var(--border)'}`,
       flex: 1,
     }}>
-      {medal ? (
-        <span style={{ fontSize: 18 }}>{medal}</span>
-      ) : (
-        <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: 18, color }}>
-          #{rank}
-        </span>
-      )}
+      <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 900, fontSize: 17, color: rank <= 3 ? color : 'var(--stone)' }}>
+        #{rank}
+      </span>
       <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px', color: 'var(--dim)', textAlign: 'center', lineHeight: 1.2 }}>
         {label}
       </span>
@@ -364,7 +358,7 @@ export default function StatePanel({ state, onClose }: Props) {
             border: `1px solid ${state.isUnionTerritory ? '#bfdbfe' : '#bbf7d0'}`,
             color: state.isUnionTerritory ? '#1d4ed8' : '#15803d',
           }}>
-            {state.isUnionTerritory ? '🔷 Union Territory' : '🌿 Indian State'}
+            {state.isUnionTerritory ? 'Union Territory' : 'State'}
           </span>
           {(() => {
             const terrain = STATE_TERRAIN[state.code]
@@ -377,7 +371,7 @@ export default function StatePanel({ state, onClose }: Props) {
                 border: `1px solid ${info.topColor}55`,
                 color: 'var(--muted)',
               }}>
-                {info.icon} {info.label}
+                {info.label}
               </span>
             ) : null
           })()}
@@ -390,7 +384,7 @@ export default function StatePanel({ state, onClose }: Props) {
           {state.name}
         </h2>
         <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 5 }}>
-          🏛 {state.capital} &nbsp;·&nbsp;
+          {state.capital} &nbsp;·&nbsp;
           <span style={{ fontWeight: 600, color: 'var(--stone)' }}>{state.code}</span>
           &nbsp;·&nbsp; {state.area.toLocaleString()} km²
         </p>
