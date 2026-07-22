@@ -15,7 +15,16 @@ export default function App() {
   const [hover, setHover]         = useState<{ state: StateData; x: number; y: number } | null>(null)
   const [camTarget, setCamTarget] = useState<string | null>(null)
 
+  const handleModeChange = useCallback((newMode: HeatmapMode) => {
+    setMode(newMode)
+    if (newMode !== 'none') {
+      setSelected(null)
+      setCamTarget(null)
+    }
+  }, [])
+
   const handleSelect = useCallback((state: StateData) => {
+    // State selection is only available in Normal mode ('none')
     setSelected(prev => {
       const isSame = prev?.code === state.code
       setCamTarget(isSame ? null : state.code)
@@ -67,7 +76,7 @@ export default function App() {
       </Canvas>
 
       {/* UI overlays */}
-      <MapControls mode={mode} onMode={setMode} />
+      <MapControls mode={mode} onMode={handleModeChange} />
 
       {/* Hover tooltip — only when no state selected */}
       {hover && !selected && <HoverTooltip data={hover} />}

@@ -189,12 +189,18 @@ function StateMesh({ shapes, code, stateData, heatmapMode, isSelected, onStateCl
         rotation={[-Math.PI / 2, 0, 0]}
         castShadow receiveShadow
         onPointerOver={e => {
-          e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'
+          e.stopPropagation(); setHovered(true)
+          if (heatmapMode === 'none') document.body.style.cursor = 'pointer'
           if (stateData) onHover({ state: stateData, x: e.clientX, y: e.clientY })
         }}
         onPointerMove={e => { if (stateData) onHover({ state: stateData, x: e.clientX, y: e.clientY }) }}
         onPointerOut={() => { setHovered(false); document.body.style.cursor = 'default'; onHover(null) }}
-        onClick={e => { e.stopPropagation(); if (stateData) onStateClick(stateData) }}
+        onClick={e => {
+          e.stopPropagation()
+          if (heatmapMode === 'none' && stateData) {
+            onStateClick(stateData)
+          }
+        }}
       />
       <lineSegments rotation={[-Math.PI / 2, 0, 0]} renderOrder={1}>
         <edgesGeometry args={[geometry, 20]} />

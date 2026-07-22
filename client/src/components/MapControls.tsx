@@ -8,7 +8,7 @@ interface Props {
 }
 
 const MODES: { key: HeatmapMode; label: string; icon: string; color: string; lo: string; hi: string }[] = [
-  { key: 'none',       label: 'Terrain',    icon: '🌍', color: '#3d7a2a', lo: '',        hi: '' },
+  { key: 'none',       label: 'Normal',     icon: '🗺️', color: '#3d7a2a', lo: '',        hi: '' },
   { key: 'gdp',        label: 'GDP',        icon: '📊', color: '#059669', lo: 'Low',    hi: '₹32L Cr' },
   { key: 'population', label: 'Population', icon: '👥', color: '#0284c7', lo: 'Sparse', hi: '220M+' },
   { key: 'perCapita',  label: 'Per Capita', icon: '💰', color: '#d97706', lo: '₹50k',   hi: '₹6L+' },
@@ -97,8 +97,8 @@ export default function MapControls({ mode, onMode }: Props) {
           </div>
         ))}
 
-        <div style={{ padding: '7px 14px', fontSize: 11, color: 'var(--dim)', fontStyle: 'italic' }}>
-          Click any state
+        <div style={{ padding: '7px 14px', fontSize: 11, color: mode === 'none' ? '#059669' : 'var(--dim)', fontWeight: mode === 'none' ? 700 : 500 }}>
+          {mode === 'none' ? '✨ Select state for details' : '👁️ Visualiser mode (watching only)'}
         </div>
       </div>
 
