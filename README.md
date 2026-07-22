@@ -1,77 +1,72 @@
-# PolyCraft 🏙️
+# IndiaMap 🌍
 
-PolyCraft is a sophisticated, browser-based 3D economic strategy and simulation game. Set against a highly detailed, interactive 3D map of modern India, players compete to build financial empires by acquiring, managing, and trading cities. The game features a vibrant, voxel-inspired aesthetic paired with a deep, player-driven economy.
+An interactive **3D data visualisation** of India's states and union territories — built with React, Three.js and Vite.
 
-## 🌟 Features
-- **Interactive 3D Voxel Map**: Explore a beautiful, blocky (Minecraft-inspired) 3D map of modern India (including Telangana and Ladakh) built with React Three Fiber.
-- **Dynamic Player Economy**: Buy unowned cities, generate daily GDP, and watch your net worth grow.
-- **Real-Time Multiplayer Trading & Auctions**: Trade cities with other players or initiate live bidding wars using real-time WebSockets.
-- **Daily Rewards Hub**: Visit the Daily Chest island to claim random rewards and boost your empire's growth.
-- **Smart Camera System**: Smooth, interaction-aware camera lerping and transitions.
-- **Deterministic Rendering**: Zero-flicker procedural asset generation utilizing custom spatial hashing.
-
-## 🛠️ Tech Stack
-- **Frontend**: React 18, Vite, React Three Fiber, Drei, Zustand, HTML5 Canvas
-- **Backend**: Node.js, Express.js
-- **Database**: PostgreSQL with Prisma ORM
-- **Real-Time**: Socket.io
-- **Authentication**: Custom JWT with bcrypt hashing
-
-## 🚀 Getting Started
-
-### Prerequisites
-- Node.js (v18+)
-- PostgreSQL installed and running
-
-### Installation
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/prabhu-omkar/polycraft.git
-   cd polycraft
-   ```
-
-2. Setup the Backend:
-   ```bash
-   cd server
-   npm install
-   ```
-   Create a `.env` file in the `server` directory and add your Postgres connection string and JWT secret:
-   ```env
-   DATABASE_URL="postgresql://user:password@localhost:5432/polycraft?schema=public"
-   JWT_SECRET="your_super_secret_key"
-   ```
-   Run database migrations and seed the initial data:
-   ```bash
-   npm run prisma:push
-   npm run seed
-   ```
-
-3. Setup the Frontend:
-   ```bash
-   cd ../client
-   npm install
-   ```
-
-### Running the Game
-You will need two terminal windows to run both the client and server.
-
-1. Start the backend server:
-   ```bash
-   cd server
-   npm run dev
-   ```
-
-2. Start the frontend client:
-   ```bash
-   cd client
-   npm run dev
-   ```
-The game will be available at `http://localhost:5174/` (or whichever port Vite provides).
-
-## 🎮 Demo Users
-The database seed script automatically creates three demo users you can use to test the game:
-- **Username**: `emperor1`, `emperor2`, `emperor3`
-- **Password**: `password123` (for all demo accounts)
+Click any state on the 3D voxel map to explore a rich data panel with animated charts, national rankings, and comparative visuals.
 
 ---
-*Built with ❤️ utilizing WebGL, React, and PostgreSQL.*
+
+## Features
+
+- **3D voxel map** of all 36 Indian states & UTs (React Three Fiber + Three.js)
+- **Terrain biome colours** — Himalayan snow, desert sand, coastal teal, Deccan plateau rust, fertile plains green, dense forest
+- **5 visualisation modes** with height + colour encoding:
+  - 🌍 Terrain (natural geography, per-capita height)
+  - 📊 GDP
+  - 👥 Population
+  - 💰 Per Capita Income
+  - 📚 Literacy Rate
+- **State detail panel** with:
+  - National rank badges (🥇🥈🥉 medals for top 3)
+  - Animated SVG radar chart vs national average
+  - Animated donut rings, half-arc gauge, comparative bars
+  - GDP share of India visualisation
+  - Population density & area tiles
+- **Animated amber pulse rings** on selected state
+- **Hover tooltip** with key stats
+- **Mobile responsive** — bottom sheet panel on small screens
+- Fully **serverless** — no backend or database required
+
+---
+
+## Tech Stack
+
+| Layer | Library |
+|---|---|
+| UI | React 18 + TypeScript |
+| 3D | @react-three/fiber · three.js |
+| Build | Vite |
+| Styling | Vanilla CSS (no Tailwind) |
+| Fonts | Inter · Space Grotesk (Google Fonts) |
+| Data | Static JSON (indiaData.ts) |
+
+---
+
+## Getting Started
+
+```bash
+git clone https://github.com/prabhu-omkar/IndiaMap.git
+cd IndiaMap/client
+npm install
+npm run dev
+```
+
+Open [http://localhost:5173](http://localhost:5173).
+
+---
+
+## Data
+
+State statistics are stored in [`client/src/data/indiaData.ts`](client/src/data/indiaData.ts) and include:
+
+- GDP, Per Capita Income, Population, Literacy Rate, Area
+- Cities (name, population, GDP)
+- Industries
+
+Terrain biome classification lives in [`client/src/data/terrainData.ts`](client/src/data/terrainData.ts).
+
+---
+
+## License
+
+MIT

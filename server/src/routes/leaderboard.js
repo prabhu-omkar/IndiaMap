@@ -7,9 +7,9 @@ router.get('/', async (req, res) => {
   try {
     // Rank users by total GDP income (daily income = sum of all owned district GDPs)
     const users = await prisma.user.findMany({
-      where: { ownedDistricts: { some: {} } },
+      where: { ownedCities: { some: {} } },
       include: {
-        ownedDistricts: { select: { name: true, code: true, gdp: true, state: { select: { name: true } } } }
+        ownedCities: { select: { name: true, code: true, gdp: true, state: { select: { name: true } } } }
       },
       orderBy: { dailyIncome: 'desc' },
       take: 20
@@ -22,8 +22,8 @@ router.get('/', async (req, res) => {
       color: u.color,
       dailyIncome: u.dailyIncome,
       totalEarnings: u.totalEarnings,
-      districtsOwned: u.ownedDistricts.length,
-      territories: u.ownedDistricts.slice(0, 5).map(d => d.name),
+      districtsOwned: u.ownedCities.length,
+      territories: u.ownedCities.slice(0, 5).map(d => d.name),
     }));
 
     res.json({ type: 'empire', data: leaderboard });

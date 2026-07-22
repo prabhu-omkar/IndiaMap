@@ -70,14 +70,14 @@ router.get('/me', authMiddleware, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.userId },
-      include: { ownedDistricts: { select: { id: true, name: true, code: true, gdp: true, stateId: true } } }
+      include: { ownedCities: { select: { id: true, name: true, code: true, gdp: true, stateId: true } } }
     });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
     res.json({
       id: user.id, username: user.username, email: user.email,
       walletBalance: user.walletBalance, dailyIncome: user.dailyIncome, totalEarnings: user.totalEarnings, color: user.color,
-      ownedDistricts: user.ownedDistricts
+      ownedDistricts: user.ownedCities
     });
   } catch (err) {
     console.error('Get user error:', err);

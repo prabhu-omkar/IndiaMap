@@ -1,296 +1,286 @@
-import { useRef, useState, useEffect, useMemo, useCallback } from 'react'
+import { useRef, useState, useEffect, useMemo } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { geoMercator } from 'd3-geo'
+import { StateData } from '../data/indiaData'
+import { STATE_TERRAIN, TERRAIN_INFO } from '../data/terrainData'
+import { HeatmapMode } from '../App'
 
-function coordsToShape(coords: number[][], projection: any): THREE.Shape | null {
+const projection = geoMercator().center([82, 23]).scale(20).translate([0, 0])
+
+function coordsToShape(coords: number[][]): THREE.Shape | null {
   const shape = new THREE.Shape()
   let started = false
   for (const [lng, lat] of coords) {
     const p = projection([lng, lat])
     if (!p) continue
-    const x = p[0]
-    const y = -p[1]
-    if (!started) { shape.moveTo(x, y); started = true }
-    else shape.lineTo(x, y)
+    if (!started) { shape.moveTo(p[0], -p[1]); started = true }
+    else shape.lineTo(p[0], -p[1])
   }
   if (!started) return null
   shape.closePath()
   return shape
 }
 
-function geometryToShapes(geometry: any, projection: any): THREE.Shape[] {
+function geometryToShapes(geometry: any): THREE.Shape[] {
   const shapes: THREE.Shape[] = []
-  if (geometry.type === 'Polygon') {
-    const outer = coordsToShape(geometry.coordinates[0], projection)
-    if (outer) {
-      for (let i = 1; i < geometry.coordinates.length; i++) {
-        const hole = coordsToShape(geometry.coordinates[i], projection)
-        if (hole) {
-          const holePath = new THREE.Path(hole.getPoints())
-          outer.holes.push(holePath)
-        }
-      }
-      shapes.push(outer)
+  const processPolygon = (rings: number[][][]) => {
+    const outer = coordsToShape(rings[0])
+    if (!outer) return
+    for (let i = 1; i < rings.length; i++) {
+      const hole = coordsToShape(rings[i])
+      if (hole) outer.holes.push(new THREE.Path(hole.getPoints()))
     }
-  } else if (geometry.type === 'MultiPolygon') {
-    for (const polygon of geometry.coordinates) {
-      const outer = coordsToShape(polygon[0], projection)
-      if (outer) {
-        for (let i = 1; i < polygon.length; i++) {
-          const hole = coordsToShape(polygon[i], projection)
-          if (hole) {
-            const holePath = new THREE.Path(hole.getPoints())
-            outer.holes.push(holePath)
-          }
-        }
-        shapes.push(outer)
-      }
-    }
+    shapes.push(outer)
   }
+  if (geometry.type === 'Polygon')      processPolygon(geometry.coordinates)
+  else if (geometry.type === 'MultiPolygon') geometry.coordinates.forEach(processPolygon)
   return shapes
 }
 
-// Minecraft color palette for states
-const MC_COLORS = {
-  default: '#4a8c2a',    // Grass green
-  hover: '#5da033',
-  selected: '#55FF55',
-  myOwned: '#2d6e12',    // Dark green (you own it)
-  forSale: '#c9a84c',    // Gold (available)
-  otherOwned: '#8b4040', // Dark red (enemy)
+/* ── Color logic ─────────────────────────────────────────────── */
+function getStateColors(
+  state: StateData | undefined,
+  mode: HeatmapMode,
+  isSelected: boolean,
+  isHovered: boolean,
+): [THREE.Color, THREE.Color] {
+  if (isSelected) return [new THREE.Color('#d97706'), new THREE.Color('#7a3a00')]
+  if (isHovered)  return [new THREE.Color('#0284c7'), new THREE.Color('#014e7a')]
+  if (!state)     return [new THREE.Color('#9ca3af'), new THREE.Color('#4b5563')]
+
+  const lerp = (lo: THREE.Color, hi: THREE.Color, t: number) =>
+    new THREE.Color().lerpColors(lo, hi, Math.min(1, Math.max(0, t)))
+
+  // ── Standard / Terrain mode ──────────────────────────────────
+  if (mode === 'none') {
+    const info = TERRAIN_INFO[STATE_TERRAIN[state.code] ?? 'plains']
+    return [new THREE.Color(info.topColor), new THREE.Color(info.sideColor)]
+  }
+
+  // ── Data-driven modes ────────────────────────────────────────
+  let top: THREE.Color
+  if (mode === 'gdp')        top = lerp(new THREE.Color('#c8d5b9'), new THREE.Color('#2d6a1f'), state.totalGdp / 3224000)
+  else if (mode === 'population') top = lerp(new THREE.Color('#bfd7ea'), new THREE.Color('#0c4a87'), state.population / 220)
+  else if (mode === 'perCapita')  top = lerp(new THREE.Color('#f5e6c8'), new THREE.Color('#92400e'), (state.perCapitaIncome - 50000) / 550000)
+  else /* literacy */             top = lerp(new THREE.Color('#f3e8ff'), new THREE.Color('#4c1d95'), state.literacyRate / 100)
+
+  return [top, top.clone().multiplyScalar(0.48)]
 }
 
-function StateMesh({ shapes, code, stateData, currentUser, isSelected, onStateClick, onHover }: any) {
+/* ── Extrude depth ───────────────────────────────────────────── */
+function calcDepth(state: StateData | undefined, mode: HeatmapMode): number {
+  if (!state) return 0.36
+  if (mode === 'none') {
+    // Terrain base height + subtle per-capita modifier for visual interest
+    const base = TERRAIN_INFO[STATE_TERRAIN[state.code] ?? 'plains'].heightBase
+    return base + (state.perCapitaIncome / 600000) * 0.16
+  }
+  if (mode === 'gdp')        return 0.26 + (state.totalGdp / 3224000)        * 3.0
+  if (mode === 'population') return 0.26 + (state.population / 220)          * 2.5
+  if (mode === 'perCapita')  return 0.26 + ((state.perCapitaIncome - 50000) / 550000) * 2.2
+  /* literacy */             return 0.26 + (state.literacyRate / 100)        * 2.2
+}
+
+/* ── Pulse rings on selected state ───────────────────────────── */
+function PulseRings({ baseY }: { baseY: number }) {
+  const r0 = useRef<THREE.Mesh>(null)
+  const r1 = useRef<THREE.Mesh>(null)
+  const r2 = useRef<THREE.Mesh>(null)
+  const geo = useMemo(() => new THREE.RingGeometry(0.9, 1.1, 48), [])
+
+  useFrame(() => {
+    const now = Date.now() / 2400
+    ;[r0, r1, r2].forEach((ref, i) => {
+      if (!ref.current) return
+      const t = (now + i * 0.333) % 1
+      const s = 0.3 + t * 3.0
+      ref.current.scale.set(s, s, 1)
+      ;(ref.current.material as THREE.MeshBasicMaterial).opacity = (1 - t) * 0.50
+    })
+  })
+
+  return (
+    <group rotation={[-Math.PI / 2, 0, 0]} position={[0, baseY + 0.08, 0]}>
+      <mesh ref={r0} geometry={geo}><meshBasicMaterial color="#d97706" transparent side={THREE.DoubleSide} /></mesh>
+      <mesh ref={r1} geometry={geo}><meshBasicMaterial color="#d97706" transparent side={THREE.DoubleSide} /></mesh>
+      <mesh ref={r2} geometry={geo}><meshBasicMaterial color="#d97706" transparent side={THREE.DoubleSide} /></mesh>
+    </group>
+  )
+}
+
+/* ── Individual state block ──────────────────────────────────── */
+function StateMesh({ shapes, code, stateData, heatmapMode, isSelected, onStateClick, onHover }: {
+  shapes:       THREE.Shape[]
+  code:         string
+  stateData?:   StateData
+  heatmapMode:  HeatmapMode
+  isSelected:   boolean
+  onStateClick: (state: StateData) => void
+  onHover:      (data: { state: StateData; x: number; y: number } | null) => void
+}) {
   const groupRef = useRef<THREE.Group>(null)
+  const meshRef  = useRef<THREE.Mesh>(null)
   const [hovered, setHovered] = useState(false)
 
+  const extrudeDepth = useMemo(() => calcDepth(stateData, heatmapMode), [stateData, heatmapMode])
+
   const geometry = useMemo(() => {
-    if (!shapes || shapes.length === 0) return null
-    const extrudeSettings = {
-      depth: 0.5,
-      bevelEnabled: false,
-      curveSegments: 1, // Maximum blockiness
-      steps: 1,
-    }
-    const geo = new THREE.ExtrudeGeometry(shapes, extrudeSettings)
+    if (!shapes.length) return null
+    const geo = new THREE.ExtrudeGeometry(shapes, {
+      depth: extrudeDepth,
+      bevelEnabled: true,
+      bevelSegments: 1,
+      bevelSize: 0.012,
+      bevelThickness: 0.012,
+    })
     geo.computeBoundingBox()
     const center = new THREE.Vector3()
-    geo.boundingBox?.getCenter(center)
+    geo.boundingBox!.getCenter(center)
     geo.translate(-center.x, -center.y, -center.z)
-    geo.userData.center = center
+    geo.userData.center = center.clone()
     return geo
-  }, [shapes])
+  }, [shapes, extrudeDepth])
 
   useEffect(() => {
-    if (groupRef.current && geometry && geometry.userData.center) {
+    if (groupRef.current && geometry?.userData.center) {
       const { x, y, z } = geometry.userData.center
       groupRef.current.position.set(x, z, -y)
       groupRef.current.userData.baseY = z
     }
   }, [geometry])
 
-  const ownershipInfo = useMemo(() => {
-    if (!stateData?.cities) return { myOwned: 0, othersOwned: 0, forSale: 0, total: 0 }
-    const cities = stateData.cities
-    const myOwned = cities.filter((d: any) => d.ownerId === currentUser?.id).length
-    const othersOwned = cities.filter((d: any) => d.ownerId && d.ownerId !== currentUser?.id).length
-    const forSale = cities.filter((d: any) => d.isForSale).length
-    return { myOwned, othersOwned, forSale, total: cities.length }
-  }, [stateData, currentUser])
-
-  const topColor = useMemo(() => {
-    if (isSelected) return MC_COLORS.selected
-    if (hovered) return MC_COLORS.hover
-    const { myOwned, othersOwned, forSale, total } = ownershipInfo
-    if (total > 0 && myOwned > 0) return MC_COLORS.myOwned
-    if (total > 0 && forSale > 0) return MC_COLORS.forSale
-    if (total > 0 && othersOwned > 0) return MC_COLORS.otherOwned
-    return MC_COLORS.default
-  }, [isSelected, hovered, ownershipInfo])
-
-  // Top face = grass color, side face = dirt brown
-  const materials = useMemo(() => [
-    new THREE.MeshStandardMaterial({ color: topColor, roughness: 1, metalness: 0 }),
-    new THREE.MeshStandardMaterial({ color: '#866043', roughness: 1, metalness: 0 }),
-  ], [topColor])
-
   useFrame((_, delta) => {
     if (!groupRef.current) return
-    const baseY = groupRef.current.userData.baseY || 0
-    const lift = isSelected ? 0.25 : hovered ? 0.03 : 0
-    groupRef.current.position.y = THREE.MathUtils.lerp(groupRef.current.position.y, baseY + lift, 4 * delta)
+    const base   = groupRef.current.userData.baseY ?? 0
+    const target = isSelected ? base + 0.26 : hovered ? base + 0.12 : base
+    groupRef.current.position.y = THREE.MathUtils.lerp(groupRef.current.position.y, target, 9 * delta)
+
+    // Gentle emissive pulse on selected state
+    if (isSelected && meshRef.current) {
+      const mats = meshRef.current.material as THREE.Material[]
+      const m = mats[0] as THREE.MeshStandardMaterial
+      m.emissiveIntensity = 0.16 + Math.sin(Date.now() * 0.0022) * 0.08
+    }
   })
+
+  const [topColor, sideColor] = useMemo(
+    () => getStateColors(stateData, heatmapMode, isSelected, hovered),
+    [stateData, heatmapMode, isSelected, hovered],
+  )
+
+  const [topMat, sideMat] = useMemo(() => [
+    new THREE.MeshStandardMaterial({
+      color: topColor, roughness: 0.60, metalness: 0.04,
+      emissive: isSelected ? topColor.clone().multiplyScalar(0.24) : hovered ? topColor.clone().multiplyScalar(0.10) : new THREE.Color(0),
+      emissiveIntensity: isSelected ? 0.18 : hovered ? 0.10 : 0,
+    }),
+    new THREE.MeshStandardMaterial({ color: sideColor, roughness: 0.92 }),
+  ], [topColor, sideColor, isSelected, hovered])
 
   if (!geometry) return null
 
   return (
     <group ref={groupRef}>
       <mesh
+        ref={meshRef}
         geometry={geometry}
-        material={materials}
+        material={[topMat, sideMat]}
         rotation={[-Math.PI / 2, 0, 0]}
-        onPointerOver={(e) => {
-          e.stopPropagation()
-          setHovered(true)
-          document.body.style.cursor = 'pointer'
-          if (stateData) onHover({
-            name: stateData.name || code,
-            gdp: stateData.totalGdp || 0,
-            owned: ownershipInfo.myOwned,
-            total: ownershipInfo.total,
-            x: e.clientX || 0,
-            y: e.clientY || 0,
-          })
+        castShadow receiveShadow
+        onPointerOver={e => {
+          e.stopPropagation(); setHovered(true); document.body.style.cursor = 'pointer'
+          if (stateData) onHover({ state: stateData, x: e.clientX, y: e.clientY })
         }}
-        onPointerOut={() => {
-          setHovered(false)
-          document.body.style.cursor = 'default'
-          onHover(null)
-        }}
-        onClick={(e) => {
-          e.stopPropagation()
-          onStateClick(code)
-        }}
-        castShadow
-        receiveShadow
+        onPointerMove={e => { if (stateData) onHover({ state: stateData, x: e.clientX, y: e.clientY }) }}
+        onPointerOut={() => { setHovered(false); document.body.style.cursor = 'default'; onHover(null) }}
+        onClick={e => { e.stopPropagation(); if (stateData) onStateClick(stateData) }}
       />
-      {/* Black outline edges for blocky Minecraft look */}
-      {geometry && (
-        <lineSegments rotation={[-Math.PI / 2, 0, 0]}>
-          <edgesGeometry args={[geometry, 15]} />
-          <lineBasicMaterial color="#111" transparent opacity={0.6} />
-        </lineSegments>
-      )}
+      <lineSegments rotation={[-Math.PI / 2, 0, 0]} renderOrder={1}>
+        <edgesGeometry args={[geometry, 20]} />
+        <lineBasicMaterial
+          color={isSelected ? '#78340c' : hovered ? '#075985' : '#1c1917'}
+          transparent
+          opacity={isSelected ? 0.80 : hovered ? 0.65 : 0.16}
+        />
+      </lineSegments>
+      {isSelected && <PulseRings baseY={extrudeDepth / 2} />}
     </group>
   )
 }
 
-function MinecraftOcean() {
-  const ref = useRef<THREE.Mesh>(null)
-
-  // Animate water UVs for subtle movement
-  useFrame(() => {
-    if (ref.current) {
-      const mat = ref.current.material as THREE.MeshStandardMaterial
-      if (mat.map) {
-        mat.map.offset.x += 0.0001
-        mat.map.offset.y += 0.00005
-      }
-    }
-  })
-
-  const waterMat = useMemo(() => {
-    const size = 16
+/* ── Sandy ocean floor ───────────────────────────────────────── */
+function Ocean() {
+  const mat = useMemo(() => {
+    const size = 32
     const data = new Uint8Array(size * size * 4)
-    const blues = [
-      new THREE.Color('#2b65d1'),
-      new THREE.Color('#3a6dd4'),
-      new THREE.Color('#2558b8'),
-      new THREE.Color('#3f76e4'),
+    const palette = [
+      [196, 188, 174], [186, 178, 164], [204, 196, 182],
+      [178, 170, 157], [210, 200, 186],
     ]
     for (let i = 0; i < size * size; i++) {
-      const c = blues[Math.floor(Math.random() * blues.length)]
-      data[i*4] = c.r * 255; data[i*4+1] = c.g * 255; data[i*4+2] = c.b * 255; data[i*4+3] = 255
+      const [r, g, b] = palette[Math.floor(Math.random() * palette.length)]
+      data[i*4]=r; data[i*4+1]=g; data[i*4+2]=b; data[i*4+3]=255
     }
     const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat)
-    tex.magFilter = THREE.NearestFilter
-    tex.minFilter = THREE.NearestFilter
-    tex.wrapS = THREE.RepeatWrapping
-    tex.wrapT = THREE.RepeatWrapping
-    tex.repeat.set(300, 300)
+    tex.magFilter = tex.minFilter = THREE.NearestFilter
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+    tex.repeat.set(120, 120)
     tex.needsUpdate = true
-    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8, metalness: 0.1 })
+    return new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 })
   }, [])
 
   return (
-    <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.25, 0]} material={waterMat}>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.22, 0]} receiveShadow material={mat}>
       <planeGeometry args={[600, 600]} />
     </mesh>
   )
 }
 
-export default function IndiaMap({ states, selectedState, currentUser, onStateClick, onHover }: any) {
+/* ── Main export ─────────────────────────────────────────────── */
+interface Props {
+  states:        StateData[]
+  selectedState: StateData | null
+  heatmapMode:   HeatmapMode
+  onStateClick:  (state: StateData) => void
+  onHover:       (data: { state: StateData; x: number; y: number } | null) => void
+}
+
+export default function IndiaMap({ states, selectedState, heatmapMode, onStateClick, onHover }: Props) {
   const [geoFeatures, setGeoFeatures] = useState<any[]>([])
 
   useEffect(() => {
-    fetch('/modern_india.geojson')
-      .then(r => r.json())
-      .then(geoData => {
-        setGeoFeatures(geoData.features || [])
-      })
-      .catch(err => console.error('Failed to load GeoJSON:', err))
-  }, [])
-
-  const projection = useMemo(() => {
-    return geoMercator().center([82, 23]).scale(20).translate([0, 0])
+    fetch('/modern_india.geojson').then(r => r.json()).then(d => setGeoFeatures(d.features ?? []))
   }, [])
 
   const stateShapes = useMemo(() => {
-    if (!geoFeatures.length) return []
     const groups: Record<string, THREE.Shape[]> = {}
-    for (const feature of geoFeatures) {
-      const code = feature.properties?.ID || ''
+    for (const f of geoFeatures) {
+      const code = f.properties?.ID ?? ''
       if (!code) continue
-      const shapes = geometryToShapes(feature.geometry, projection)
-      if (!shapes.length) continue
+      const shapes = geometryToShapes(f.geometry)
       if (!groups[code]) groups[code] = []
       groups[code].push(...shapes)
     }
     return Object.entries(groups).map(([code, shapes]) => ({ code, shapes }))
-  }, [geoFeatures, projection])
+  }, [geoFeatures])
 
-  const stateDataMap = useMemo(() => {
-    const map: Record<string, any> = {}
-    states.forEach((s: any) => { map[s.code] = s })
-    return map
+  const stateMap = useMemo(() => {
+    const m: Record<string, StateData> = {}
+    states.forEach(s => { m[s.code] = s })
+    return m
   }, [states])
-
-  // Minecraft-style blocky clouds
-  const clouds = useMemo(() => {
-    const arr = []
-    for (let i = 0; i < 20; i++) {
-      const x = (Math.random() - 0.5) * 80
-      const z = (Math.random() - 0.5) * 80
-      const w = Math.floor(Math.random() * 4) + 3
-      const d = Math.floor(Math.random() * 3) + 2
-      arr.push({ x, z, w, d, speed: 0.003 + Math.random() * 0.005 })
-    }
-    return arr
-  }, [])
 
   return (
     <group>
-      <MinecraftOcean />
-
-      {/* Blocky sun */}
-      <mesh position={[40, 30, -40]}>
-        <boxGeometry args={[6, 6, 0.5]} />
-        <meshBasicMaterial color="#ffffa0" />
-      </mesh>
-      <pointLight position={[40, 30, -40]} intensity={0.5} distance={100} color="#ffffa0" />
-
-      {/* Minecraft clouds */}
-      {clouds.map((c, i) => (
-        <group key={`cloud-${i}`} position={[c.x, 18, c.z]}>
-          {Array.from({ length: c.w }).map((_, bx) =>
-            Array.from({ length: c.d }).map((_, bz) => (
-              <mesh key={`${bx}-${bz}`} position={[bx - c.w/2, 0, bz - c.d/2]}>
-                <boxGeometry args={[1, 0.5, 1]} />
-                <meshBasicMaterial color="#ffffff" />
-              </mesh>
-            ))
-          )}
-        </group>
-      ))}
-
+      <Ocean />
       {stateShapes.map(({ code, shapes }) => (
         <StateMesh
           key={code}
           code={code}
           shapes={shapes}
-          stateData={stateDataMap[code]}
-          currentUser={currentUser}
+          stateData={stateMap[code]}
+          heatmapMode={heatmapMode}
           isSelected={selectedState?.code === code}
           onStateClick={onStateClick}
           onHover={onHover}

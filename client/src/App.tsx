@@ -1,236 +1,79 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { Canvas } from '@react-three/fiber'
-import api from './api'
-import socket from './socket'
-import Auth from './components/Auth'
+import { INDIA_STATES_DATA, StateData } from './data/indiaData'
 import IndiaMap from './components/IndiaMap'
-import TopBar from './components/TopBar'
-import DistrictPanel from './components/DistrictPanel'
-import DailyChest from './components/DailyChest'
-import AuctionHouse from './components/AuctionHouse'
-import TradePanel from './components/TradePanel'
-import MyEmpire from './components/MyEmpire'
 import CameraController from './components/CameraController'
-import Islands from './components/Islands'
+import StatePanel from './components/StatePanel'
+import MapControls from './components/MapControls'
+import HoverTooltip from './components/HoverTooltip'
+
+export type HeatmapMode = 'none' | 'gdp' | 'population' | 'perCapita' | 'literacy'
 
 export default function App() {
-  const [user, setUser] = useState<any>(null)
-  const [states, setStates] = useState<any[]>([])
-  const [selectedState, setSelectedState] = useState<any>(null)
-  const [tooltip, setTooltip] = useState<any>(null)
-  const [cameraTarget, setCameraTarget] = useState<string | null>(null)
-  const [showChest, setShowChest] = useState(false)
-  const [showAuctions, setShowAuctions] = useState(false)
-  const [showTrades, setShowTrades] = useState(false)
-  const [showEmpire, setShowEmpire] = useState(false)
-  const [notification, setNotification] = useState<string | null>(null)
+  const [selected, setSelected]   = useState<StateData | null>(null)
+  const [mode, setMode]           = useState<HeatmapMode>('none')
+  const [hover, setHover]         = useState<{ state: StateData; x: number; y: number } | null>(null)
+  const [camTarget, setCamTarget] = useState<string | null>(null)
 
-  useEffect(() => {
-    const token = localStorage.getItem('bidindia_token')
-    if (token) {
-      api.get('/auth/me').then(r => setUser(r.data)).catch(() => {
-        localStorage.removeItem('bidindia_token')
-      })
-    }
+  const handleSelect = useCallback((state: StateData) => {
+    setSelected(prev => {
+      const isSame = prev?.code === state.code
+      setCamTarget(isSame ? null : state.code)
+      return isSame ? null : state
+    })
   }, [])
 
-  const loadData = useCallback(() => {
-    api.get('/states').then(r => setStates(r.data)).catch(() => {})
+  const handleClose = useCallback(() => {
+    setSelected(null)
+    setCamTarget(null)
   }, [])
-
-  useEffect(() => { loadData() }, [loadData])
-
-  useEffect(() => {
-    socket.on('city_update', () => {
-      loadData()
-      if (user) api.get('/auth/me').then(r => setUser(r.data)).catch(() => {})
-    })
-    socket.on('daily_income', (data: any) => {
-      showNotif(data.message)
-      loadData()
-      if (user) api.get('/auth/me').then(r => setUser(r.data)).catch(() => {})
-    })
-    socket.on('auction_update', () => { loadData() })
-    socket.on('trade_update', () => {
-      if (user) api.get('/auth/me').then(r => setUser(r.data)).catch(() => {})
-    })
-    return () => {
-      socket.off('city_update')
-      socket.off('daily_income')
-      socket.off('auction_update')
-      socket.off('trade_update')
-    }
-  }, [user, loadData])
-
-  const showNotif = (msg: string) => {
-    setNotification(msg)
-    setTimeout(() => setNotification(null), 4000)
-  }
-
-  const handleLogin = (userData: any, token: string) => {
-    localStorage.setItem('bidindia_token', token)
-    setUser(userData)
-  }
-
-  const handleLogout = () => {
-    localStorage.removeItem('bidindia_token')
-    setUser(null)
-  }
-
-  const closeAllPanels = () => {
-    setShowChest(false); setShowAuctions(false); setShowTrades(false); setShowEmpire(false)
-    setSelectedState(null)
-  }
-
-  const handleStateClick = useCallback((stateCode: string) => {
-    const found = states.find(s => s.code === stateCode)
-    if (found) {
-      setSelectedState(found)
-      setCameraTarget(stateCode)
-      setShowChest(false); setShowAuctions(false); setShowTrades(false); setShowEmpire(false)
-    }
-  }, [states])
-
-  const handleClosePanel = () => {
-    setSelectedState(null)
-    setCameraTarget(null)
-  }
-
-  const handleAction = async () => {
-    await loadData()
-    if (user) {
-      const r = await api.get('/auth/me')
-      setUser(r.data)
-    }
-    if (selectedState) {
-      const r = await api.get(`/states/${selectedState.id}`)
-      setSelectedState(r.data)
-    }
-  }
-
-  const handleChestClick = () => { closeAllPanels(); setShowChest(true); setCameraTarget('ISLAND_CHEST') }
-  const handleAuctionClick = () => { closeAllPanels(); setShowAuctions(true); setCameraTarget('ISLAND_AUCTION') }
-  const handleTradeClick = () => { closeAllPanels(); setShowTrades(true); setCameraTarget('ISLAND_TRADE') }
-  const handleEmpireClick = () => { closeAllPanels(); setShowEmpire(true); setCameraTarget('ISLAND_EMPIRE') }
-
-  if (!user) return <Auth onLogin={handleLogin} />
 
   return (
-    <>
-      <div className="canvas-container">
-        <Canvas
-          camera={{ position: [0, 14, 20], fov: 45 }}
-          gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
-          dpr={[1, 2]}
-          shadows
-        >
-          <color attach="background" args={['#78A7FF']} />
-          <ambientLight intensity={0.9} color="#FFFFFF" />
-          <directionalLight
-            position={[15, 25, 10]}
-            intensity={1.3}
-            color="#FFFCF5"
-            castShadow
-            shadow-mapSize-width={2048}
-            shadow-mapSize-height={2048}
-            shadow-camera-far={60}
-            shadow-camera-left={-25}
-            shadow-camera-right={25}
-            shadow-camera-top={25}
-            shadow-camera-bottom={-25}
-            shadow-bias={-0.0005}
-          />
-          <directionalLight position={[-15, 15, -15]} intensity={0.4} color="#E8E0D4" />
-          
-          <IndiaMap
-            states={states}
-            selectedState={selectedState}
-            currentUser={user}
-            onStateClick={handleStateClick}
-            onHover={setTooltip}
-          />
+    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: 'var(--canvas-bg)' }}>
+      {/* 3D canvas */}
+      <Canvas
+        shadows
+        camera={{ position: [0, 14, 20], fov: 44 }}
+        style={{ position: 'absolute', inset: 0, zIndex: 1 }}
+        gl={{ antialias: true, alpha: false }}
+      >
+        {/* Warm cream sky */}
+        <color attach="background" args={['#ddd8cf']} />
 
-          <Islands
-            onChestClick={handleChestClick}
-            onAuctionClick={handleAuctionClick}
-            onTradeClick={handleTradeClick}
-            onEmpireClick={handleEmpireClick}
-            chestOpen={showChest}
-          />
-
-          <CameraController target={cameraTarget} />
-        </Canvas>
-      </div>
-
-      <div className="overlay">
-        <TopBar
-          user={user}
-          onLogout={handleLogout}
-          onChest={handleChestClick}
-          onAuctions={handleAuctionClick}
-          onTrades={handleTradeClick}
-          onEmpire={handleEmpireClick}
+        {/* Bright midday lighting */}
+        <ambientLight intensity={1.3} color="#fffef8" />
+        <directionalLight
+          position={[30, 50, 20]}
+          intensity={2.0}
+          color="#fff9ec"
+          castShadow
+          shadow-mapSize-width={2048}
+          shadow-mapSize-height={2048}
+          shadow-bias={-0.0004}
         />
+        {/* Cool fill light from opposite side */}
+        <directionalLight position={[-20, 20, -25]} intensity={0.5} color="#d4e8f5" />
+        {/* Warm bounce from below */}
+        <pointLight position={[0, -5, 0]} intensity={0.3} color="#f5e6c8" />
 
-        {selectedState && (
-          <DistrictPanel
-            state={selectedState}
-            user={user}
-            onClose={handleClosePanel}
-          />
-        )}
+        <CameraController target={camTarget} />
+        <IndiaMap
+          states={INDIA_STATES_DATA}
+          selectedState={selected}
+          heatmapMode={mode}
+          onStateClick={handleSelect}
+          onHover={setHover}
+        />
+      </Canvas>
 
-        {showChest && (
-          <DailyChest
-            user={user}
-            onClose={() => { setShowChest(false); setCameraTarget(null) }}
-            onAction={handleAction}
-            showNotif={showNotif}
-          />
-        )}
+      {/* UI overlays */}
+      <MapControls mode={mode} onMode={setMode} />
 
-        {showAuctions && (
-          <AuctionHouse
-            user={user}
-            onClose={() => { setShowAuctions(false); setCameraTarget(null) }}
-            onAction={handleAction}
-            showNotif={showNotif}
-          />
-        )}
+      {/* Hover tooltip — only when no state selected */}
+      {hover && !selected && <HoverTooltip data={hover} />}
 
-        {showTrades && (
-          <TradePanel
-            user={user}
-            onClose={() => { setShowTrades(false); setCameraTarget(null) }}
-            onAction={handleAction}
-            showNotif={showNotif}
-          />
-        )}
-
-        {showEmpire && (
-          <MyEmpire
-            user={user}
-            onClose={() => { setShowEmpire(false); setCameraTarget(null) }}
-            onAction={handleAction}
-            showNotif={showNotif}
-          />
-        )}
-      </div>
-
-      {tooltip && (
-        <div className="state-tooltip" style={{ left: tooltip.x, top: tooltip.y }}>
-          <div className="tt-name">{tooltip.name}</div>
-          <div className="tt-gdp">GDP: ₹{(tooltip.gdp).toLocaleString()} Cr</div>
-          {tooltip.owned > 0 && <div className="tt-owned">{tooltip.owned}/{tooltip.total} cities owned</div>}
-        </div>
-      )}
-
-      {notification && (
-        <div className="notification">
-          <div>💰</div>
-          <div>{notification}</div>
-        </div>
-      )}
-    </>
+      {/* State detail panel */}
+      {selected && <StatePanel state={selected} onClose={handleClose} />}
+    </div>
   )
 }
