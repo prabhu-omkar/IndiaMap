@@ -123,23 +123,30 @@ function CompBar({ value, max, avg, color, label, formatted, avgLabel }: {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7, gap: 8 }}>
-        <span className="section-label" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+      {/* Header: label left, value right — no overlap possible */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, gap: 8 }}>
+        <span className="section-label" style={{ flex: '1 1 0', minWidth: 0 }}>
           {label}
         </span>
         <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 14, color, flexShrink: 0 }}>
           {formatted}
         </span>
       </div>
+
+      {/* Bar with avg marker */}
       <div className="bar-track" style={{ height: 8, position: 'relative' }}>
         <div className="bar-fill" style={{ width: `${w}%`, height: '100%', background: `linear-gradient(90deg, ${color}66, ${color})`, borderRadius: 99 }} />
-        {/* National avg line */}
+        {/* National avg line — contained within bar bounds */}
         <div style={{
-          position: 'absolute', top: -6, bottom: -6, width: 2,
-          left: `${avgPct}%`, background: 'rgba(0,0,0,0.2)', borderRadius: 2,
+          position: 'absolute', top: 0, bottom: 0, width: 2,
+          left: `${avgPct}%`, background: 'rgba(0,0,0,0.25)', borderRadius: 2,
         }} />
+      </div>
+
+      {/* Avg label sits BELOW the bar — no collision with header */}
+      <div style={{ position: 'relative', height: 18, marginTop: 2 }}>
         <div style={{
-          position: 'absolute', top: -19, left: `${avgPct}%`, transform: 'translateX(-50%)',
+          position: 'absolute', top: 0, left: `${avgPct}%`, transform: 'translateX(-50%)',
           fontSize: 8.5, color: 'var(--dim)', whiteSpace: 'nowrap', fontWeight: 600,
         }}>
           ø {avgLabel}

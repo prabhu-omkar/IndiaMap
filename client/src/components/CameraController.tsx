@@ -102,11 +102,10 @@ export default function CameraController({ target }: { target: string | null }) 
       maxDistance={50}
       minPolarAngle={0.1}
       maxPolarAngle={Math.PI / 2.1}
-      dampingFactor={0.1}
-      enableDamping
-      panSpeed={1.2}
-      rotateSpeed={0.8}
-      zoomSpeed={1.2}
+      enableDamping={false}
+      rotateSpeed={0.45}
+      panSpeed={0.8}
+      zoomSpeed={1.0}
       screenSpacePanning={true}
     />
   )
