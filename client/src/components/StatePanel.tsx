@@ -123,9 +123,13 @@ function CompBar({ value, max, avg, color, label, formatted, avgLabel }: {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
-        <span className="section-label">{label}</span>
-        <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 14, color }}>{formatted}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7, gap: 8 }}>
+        <span className="section-label" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {label}
+        </span>
+        <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 800, fontSize: 14, color, flexShrink: 0 }}>
+          {formatted}
+        </span>
       </div>
       <div className="bar-track" style={{ height: 8, position: 'relative' }}>
         <div className="bar-fill" style={{ width: `${w}%`, height: '100%', background: `linear-gradient(90deg, ${color}66, ${color})`, borderRadius: 99 }} />
